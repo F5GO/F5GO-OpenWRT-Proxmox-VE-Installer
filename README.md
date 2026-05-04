@@ -1,4 +1,4 @@
-# F5GO OpenWRT Proxmox VE Installer 🚀
+# F5GO OpenWRT Proxmox VE Installer 
 
 ![Proxmox](https://img.shields.io/badge/Proxmox-VE_8.x-orange?style=for-the-badge&logo=proxmox)
 ![OpenWrt](https://img.shields.io/badge/OpenWrt-Latest-blue?style=for-the-badge&logo=openwrt)
@@ -8,7 +8,7 @@
 
 ---
 
-## 🎯 Основная концепция
+##  Основная концепция
 
 Этот скрипт подготавливает гипервизор и виртуальную машину для работы в режиме **Hardware Passthrough**. 
 
@@ -17,7 +17,7 @@
 
 ---
 
-## ✨ Возможности
+##  Возможности
 
 *   **Настройка IOMMU (Passthrough):**
     *   Автоматическое определение CPU (Intel VT-d / AMD-Vi).
@@ -32,7 +32,7 @@
 
 ---
 
-## 🚀 Быстрый запуск
+##  Быстрый запуск
 
 Выполните команду на ноде Proxmox под пользователем `root`:
 
@@ -46,7 +46,7 @@ wget -qO f5go-openwrt-install.sh https://raw.githubusercontent.com/F5GO/F5GO-Ope
 
 ---
 
-## ⚙️ Что нужно сделать вручную?
+##  Что нужно сделать вручную?
 
 Скрипт выполняет **90% технической настройки**, но назначение конкретных физических портов требует вашего участия, так как PCI-адреса устройств уникальны для каждого сервера.
 
@@ -61,7 +61,7 @@ wget -qO f5go-openwrt-install.sh https://raw.githubusercontent.com/F5GO/F5GO-Ope
 
 ---
 
-## 🛠 Технические требования
+##  Технические требования
 
 *   **Proxmox VE:** Версия 7.x или 8.x.
 *   **Процессор:** Поддержка виртуализации в BIOS (**VT-d** для Intel или **AMD-Vi** для AMD должна быть включена).
@@ -69,7 +69,7 @@ wget -qO f5go-openwrt-install.sh https://raw.githubusercontent.com/F5GO/F5GO-Ope
 
 ---
 
-## 🤝 Контакты 
+##  Контакты 
 
 Проект развивается при поддержке сообщества **F5GO.ONE**.
 
