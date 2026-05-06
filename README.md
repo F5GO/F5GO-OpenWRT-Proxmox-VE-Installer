@@ -73,6 +73,7 @@ wget -qO f5go-openwrt-install.sh https://raw.githubusercontent.com/F5GO/F5GO-Ope
 
 Проект развивается при поддержке сообщества **F5GO.ONE**.
 
+*   **YouTube:** [F5](https://youtube.com/@F5GO)
 *   **Сайт:** [F5GO.ONE](https://f5go.one)
 *   **Telegram:** [F5GO](https://t.me/f5gou)
 
