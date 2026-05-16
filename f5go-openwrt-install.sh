@@ -2,6 +2,7 @@
 # =====================================================
 # НАЗВАНИЕ: F5GO OpenWRT Proxmox VE Installer
 # ОПИСАНИЕ: Настройка IOMMU + Установка OpenWrt VM 
+# Разработано для сообщества F5GO.ONE
 # =====================================================
 set -Eeuo pipefail
 
@@ -237,12 +238,52 @@ install_openwrt() {
   read -rp " Объем диска (МБ) [512]: " VM_ROM
   VM_ROM=${VM_ROM:-512}
 
+  DESCRIPTION=$(cat <<EOF
+<div align="center">
+  <a href="https://f5go.one" target="_blank" rel="noopener noreferrer">
+    <img src="https://f5go.ru/content/images/2026/05/f5go.one_400px.png" alt="F5GO.ONE" width="72" style="max-width:72px;height:auto;" />
+  </a>
+
+  <h2 style="font-size:24px; margin:16px 0 10px;">F5GO OpenWrt VM</h2>
+
+  <p style="margin:8px 0;">
+    Разработано для сообщества <b>F5GO.ONE</b>
+  </p>
+
+  <p style="margin:10px 0;">
+    OpenWrt x86_64 • Proxmox VE • Version: <b>${SELECTED_VER}</b>
+  </p>
+
+  <p style="margin:14px 0;">
+    <a href="https://youtube.com/@f5go" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/YouTube-@f5go-FF0000?logo=youtube&logoColor=white" alt="YouTube" />
+    </a>
+    <a href="https://vk.ru/f5gou" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/VK-f5gou-0077FF?logo=vk&logoColor=white" alt="VK" />
+    </a>
+    <a href="https://t.me/f5gou" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/Telegram-@f5gou-26A5E4?logo=telegram&logoColor=white" alt="Telegram" />
+    </a>
+  </p>
+
+  <p style="margin:12px 0;">
+    <a href="https://github.com/F5GO/F5GO-OpenWRT-Proxmox-VE-Installer" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/Repo-F5GO--OpenWRT--Proxmox--VE--Installer-00617f?logo=github&logoColor=white" alt="Repository" />
+    </a>
+    <a href="https://github.com/F5GO" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/GitHub-F5GO-181717?logo=github&logoColor=white" alt="GitHub" />
+    </a>
+  </p>
+</div>
+EOF
+)
+
   msg_info "Создание VM $VMID"
   qm create "$VMID" \
     -name "OpenWRT" \
     -cores 1 \
     -memory "$VM_RAM" \
-    -description "OpenWrt $SELECTED_VER. F5GO.ONE." \
+    -description "$DESCRIPTION" \
     -ostype l26 \
     -cpu host \
     -scsihw virtio-scsi-pci \
