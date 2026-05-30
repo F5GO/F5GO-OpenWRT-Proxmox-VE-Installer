@@ -49,6 +49,170 @@ msg_ok()   { echo -e " ${GREEN}OK: $1${NC}"; }
 msg_error() { echo -e " ${RED}ОШИБКА: $1${NC}"; }
 msg_step() { echo -e "${BLUE}${BOLD}--- $1 ---${NC}"; }
 
+get_next_vmbr_name() {
+  local max=-1
+  local name=""
+  while read -r name; do
+    [[ -z "$name" ]] && continue
+    local n="${name#vmbr}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue
+    if (( n > max )); then
+      max="$n"
+    fi
+  done < <(
+    {
+      ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -E '^vmbr[0-9]+$' || true
+      if [[ -f /etc/network/interfaces ]]; then
+        awk '
+          /^[[:space:]]*(auto|allow-hotplug)[[:space:]]+/ {
+            for (i=2; i<=NF; i++) if ($i ~ /^vmbr[0-9]+$/) print $i
+          }
+          /^[[:space:]]*iface[[:space:]]+/ {
+            if ($2 ~ /^vmbr[0-9]+$/) print $2
+          }
+        ' /etc/network/interfaces || true
+      fi
+    } | sort -u
+  )
+
+  if (( max < 0 )); then
+    echo "vmbr0"
+  else
+    echo "vmbr$((max + 1))"
+  fi
+}
+
+ensure_linux_bridge_in_interfaces() {
+  local bridge_name="$1"
+  local cidr_addr="$2"
+  local iface_file="/etc/network/interfaces"
+
+  if [[ ! -f "$iface_file" ]]; then
+    msg_error "Не найден $iface_file. Невозможно добавить мост."
+    return 1
+  fi
+
+  if grep -Eq "^[[:space:]]*iface[[:space:]]+$bridge_name[[:space:]]+inet[[:space:]]+" "$iface_file" || \
+     grep -Eq "^[[:space:]]*auto[[:space:]]+$bridge_name([[:space:]]|$)" "$iface_file"; then
+    msg_info "Мост $bridge_name уже присутствует в конфигурации сети"
+    return 0
+  fi
+
+  {
+    echo
+    echo "auto $bridge_name"
+    echo "iface $bridge_name inet static"
+    echo "  address $cidr_addr"
+    echo "  bridge-ports none"
+    echo "  bridge-stp off"
+    echo "  bridge-fd 0"
+  } >> "$iface_file"
+
+  return 0
+}
+
+reload_network_config() {
+  if command -v ifreload >/dev/null 2>&1; then
+    ifreload -a >/dev/null 2>&1 || return 1
+    return 0
+  fi
+  if systemctl list-unit-files >/dev/null 2>&1; then
+    systemctl restart networking >/dev/null 2>&1 || return 1
+    return 0
+  fi
+  return 1
+}
+
+get_next_vm_net_key() {
+  local vmid="$1"
+  local idx=0
+  while (( idx < 32 )); do
+    if ! qm config "$vmid" 2>/dev/null | grep -Eq "^net$idx:"; then
+      echo "net$idx"
+      return 0
+    fi
+    idx=$((idx + 1))
+  done
+  return 1
+}
+
+setup_bridge_and_attach_nic() {
+  local vmid="$1"
+  local default_bridge=""
+  local default_ip="192.168.1.5/24"
+
+  header
+  msg_step "ШАГ 3: ДОПОЛНИТЕЛЬНЫЙ МОСТ + NIC (ОПЦИОНАЛЬНО)"
+  echo
+  read -rp " Создать Linux Bridge и подключить VirtIO NIC к VM? [Y/n]: " CONFIRM_BRIDGE
+  CONFIRM_BRIDGE=${CONFIRM_BRIDGE:-Y}
+  if [[ ! "$CONFIRM_BRIDGE" =~ ^[Yy]$ ]]; then
+    msg_info "Пропускаем создание моста и добавление NIC"
+    return 0
+  fi
+
+  default_bridge="$(get_next_vmbr_name)"
+  echo -e " Имя моста по умолчанию: ${GREEN}${default_bridge}${NC}"
+  read -rp " Введите имя моста (или Enter для $default_bridge): " BRIDGE_NAME
+  BRIDGE_NAME=${BRIDGE_NAME:-$default_bridge}
+
+  if [[ ! "$BRIDGE_NAME" =~ ^vmbr[0-9]+$ ]]; then
+    msg_error "Некорректное имя моста: $BRIDGE_NAME (ожидается vmbrN)"
+    exit 1
+  fi
+
+  echo -e " IP/CIDR по умолчанию: ${GREEN}${default_ip}${NC}"
+  read -rp " Введите IP/CIDR (или Enter для $default_ip): " BRIDGE_IP
+  BRIDGE_IP=${BRIDGE_IP:-$default_ip}
+
+  if ! echo "$BRIDGE_IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$'; then
+    msg_error "Некорректный формат IP/CIDR: $BRIDGE_IP"
+    exit 1
+  fi
+
+  if ip -o -4 addr show | awk '{print $4}' | grep -qx "$BRIDGE_IP"; then
+    msg_error "IP $BRIDGE_IP уже используется в системе. Продолжаем на ваш риск."
+    read -rp " Продолжить несмотря на конфликт? [y/N]: " CONFIRM_CONFLICT
+    CONFIRM_CONFLICT=${CONFIRM_CONFLICT:-N}
+    if [[ ! "$CONFIRM_CONFLICT" =~ ^[Yy]$ ]]; then
+      msg_info "Операция отменена пользователем"
+      return 0
+    fi
+  fi
+
+  echo
+  msg_info "Будет создан мост: ${BRIDGE_NAME} с адресом ${BRIDGE_IP}"
+  read -rp " Подтвердите (Y/n): " CONFIRM_APPLY
+  CONFIRM_APPLY=${CONFIRM_APPLY:-Y}
+  if [[ ! "$CONFIRM_APPLY" =~ ^[Yy]$ ]]; then
+    msg_info "Пропускаем создание моста и добавление NIC"
+    return 0
+  fi
+
+  msg_info "Добавление моста в /etc/network/interfaces"
+  ensure_linux_bridge_in_interfaces "$BRIDGE_NAME" "$BRIDGE_IP"
+  msg_ok "Конфигурация моста добавлена"
+
+  msg_info "Применение сетевой конфигурации"
+  if reload_network_config; then
+    msg_ok "Сетевая конфигурация применена"
+  else
+    msg_error "Не удалось автоматически применить конфигурацию сети. Проверьте сеть и примените изменения вручную."
+  fi
+
+  local net_key=""
+  if ! net_key="$(get_next_vm_net_key "$vmid")"; then
+    msg_error "Не удалось подобрать свободный слот NIC для VM $vmid"
+    return 1
+  fi
+
+  msg_info "Добавление VirtIO NIC ($net_key) в VM $vmid на мост $BRIDGE_NAME"
+  qm set "$vmid" -"$net_key" "virtio,bridge=$BRIDGE_NAME" >/dev/null
+  msg_ok "NIC добавлен в VM ($net_key -> $BRIDGE_NAME)"
+
+  return 0
+}
+
 check_root() {
   if [[ $EUID -ne 0 ]]; then
     msg_error "Запустите скрипт от root (через sudo)"
@@ -312,6 +476,8 @@ EOF
 
   msg_info "Изменение размера диска до ${VM_ROM}MB"
   qm disk resize "$VMID" scsi0 "${VM_ROM}M" >/dev/null
+
+  setup_bridge_and_attach_nic "$VMID"
 
   header
   msg_ok "OpenWrt VM $VMID успешно создана!"
